@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>正n边形与外角</title>
+  <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/p5.js/1.4.1/p5.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #ui-panel {
+      position: absolute;
+      left: 620px;
+      top: 0;
+      width: 200px;
+      height: 600px;
+      background: #e3f0ff;
+      border: 2px solid #2196f3;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    #ui-panel label, #ui-panel input, #ui-panel button {
+      margin-top: 30px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui-panel">
+    <label for="nInput">边数 n：</label>
+    <input type="range" id="nInput" min="3" max="30" value="5" step="1" style="width: 120px;">
+    <span id="nVal">5</span>
+    <label for="lenInput">边长：</label>
+    <input type="range" id="lenInput" min="1" max="400" value="100" step="1" style="width: 120px;">
+    <span id="lenVal">100</span>
+  </div>
+  <script>
+    let n = 5;
+    let sideLen = 100;
+    let radius = 220;
+    let centerX = 300, centerY = 300;
+    let vertices = [];
+
+    function setup() {
+      createCanvas(600, 600);
+      angleMode(RADIANS);
+      drawPolygonAndAngles();
+      const nInput = document.getElementById('nInput');
+      const nValSpan = document.getElementById('nVal');
+      nInput.oninput = function() {
+        n = parseInt(this.value);
+        nValSpan.textContent = n;
+        drawPolygonAndAngles();
+      };
+      // 初始化显示
+      nValSpan.textContent = nInput.value;
+      // 边长滑块联动
+      const lenInput = document.getElementById('lenInput');
+      const lenValSpan = document.getElementById('lenVal');
+      lenInput.oninput = function() {
+        sideLen = parseInt(this.value);
+        lenValSpan.textContent = sideLen;
+        drawPolygonAndAngles();
+      };
+      // 初始化显示
+      lenValSpan.textContent = parseInt(lenInput.value);
+    }
+
+    function drawPolygonAndAngles() {
+      clear();
+      background(255);
+      radius = sideLen / (2 * Math.sin(Math.PI / n));
+      // 计算顶点
+      vertices = [];
+      for (let i = 0; i < n; i++) {
+        let angle = -PI/2 + i * TWO_PI / n;
+        let x = centerX + radius * cos(angle);
+        let y = centerY + radius * sin(angle);
+        vertices.push({x, y, angle});
+      }
+      // 画多边形
+      stroke(0);
+      strokeWeight(2);
+      fill(255, 240, 200, 120);
+      beginShape();
+      for (let v of vertices) vertex(v.x, v.y);
+      endShape(CLOSE);
+      // 画顶点和外角
+      for (let i = 0; i < n; i++) {
+        let v = vertices[i];
+        // 顶点
+        fill(0);
+        noStroke();
+        ellipse(v.x, v.y, 8, 8);
+        // 外角
+        let prev = vertices[(i - 1 + n) % n];
+        let next = vertices[(i + 1) % n];
+        let v0 = createVector(prev.x - v.x, prev.y - v.y).normalize();
+        let v1 = createVector(next.x - v.x, next.y - v.y).normalize();
+        let extAngle = PI - abs(v0.angleBetween(v1));
+        // 外角方向
+        let bisector = p5.Vector.add(v0, v1).normalize();
+        let arcStart = atan2(v0.y, v0.x);
+        let arcEnd = arcStart + extAngle;
+        // 小圆弧
+        stroke(255, 0, 0);
+        strokeWeight(2);
+        noFill();
+        let arcR = 38;
+        push();
+        translate(v.x, v.y);
+        arc(0, 0, arcR, arcR, arcStart, arcEnd);
+        pop();
+        // 标注外角度数
+        let midAngle = arcStart + extAngle / 2;
+        let tx = v.x + (arcR + 18) * cos(midAngle);
+        let ty = v.y + (arcR + 18) * sin(midAngle);
+        noStroke();
+        fill(0, 102, 204);
+        textSize(16);
+        textAlign(CENTER, CENTER);
+        let deg = (360 / n).toFixed(1);
+        text(deg + '°', tx, ty);
+        // 向外延长外角的那条边（顺时针方向的边，反向延伸）
+        let extendLen = 70;
+        let edgeDir = createVector(next.x - v.x, next.y - v.y).normalize();
+        // 反向
+        edgeDir.mult(-1);
+        let outX = v.x + (radius / cos(PI / n) - radius) * edgeDir.x + extendLen * edgeDir.x;
+        let outY = v.y + (radius / cos(PI / n) - radius) * edgeDir.y + extendLen * edgeDir.y;
+        stroke(0, 120, 255, 180);
+        strokeWeight(2);
+        line(v.x, v.y, outX, outY);
+      }
+      // 标注正n边形
+      fill(0);
+      noStroke();
+      textSize(20);
+      textAlign(CENTER, CENTER);
+      text('正' + n + '边形', centerX, centerY + radius + 30);
+    }
+  </script>
+</body>
+</html> 

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>函数y=3/x与y=2x-2动画</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+</head>
+<body>
+<script>
+// 坐标系参数
+let originX, originY;
+let unit = 27; // 1单位=27像素，适应-10到10刻度
+let dragLineX = 2; // 初始x坐标（单位）
+let dragging = false;
+let a = 3; // y = a/x
+let k = 2, b = -2; // y = kx + b
+let inputA, inputK, inputB;
+
+function setup() {
+  createCanvas(600, 600);
+  originX = width / 2;
+  originY = height / 2;
+  background(255);
+  drawAxes();
+  drawFunc1();
+  drawFunc2();
+
+  // 蓝色控件框
+  let boxX = width + 20;
+  let boxY = 0;
+  let boxW = 180;
+  let boxH = height;
+  let controlsDiv = createDiv();
+  controlsDiv.position(width + 20, 0);
+  controlsDiv.style('background', '#e3f0ff');
+  controlsDiv.style('border', '2px solid #2196f3');
+  controlsDiv.style('width', boxW + 'px');
+  controlsDiv.style('height', boxH + 'px');
+  controlsDiv.style('padding', '16px 8px');
+  controlsDiv.style('box-sizing', 'border-box');
+
+  // y = a/x 设置
+  let label1 = createDiv('y = a / x');
+  label1.parent(controlsDiv);
+  label1.style('font-size', '18px');
+  label1.style('margin-bottom', '4px');
+  let aRow = createDiv();
+  aRow.parent(controlsDiv);
+  aRow.style('margin-bottom', '18px');
+  aRow.style('display', 'flex');
+  aRow.style('align-items', 'center');
+  let aLabel = createSpan('a = ');
+  aLabel.parent(aRow);
+  inputA = createInput(a + '', 'number');
+  inputA.parent(aRow);
+  inputA.size(50);
+  inputA.input(() => { a = float(inputA.value()); });
+
+  // y = kx + b 设置
+  let label2 = createDiv('y = kx + b');
+  label2.parent(controlsDiv);
+  label2.style('font-size', '18px');
+  label2.style('margin-bottom', '4px');
+  let kRow = createDiv();
+  kRow.parent(controlsDiv);
+  kRow.style('display', 'flex');
+  kRow.style('align-items', 'center');
+  let kLabel = createSpan('k = ');
+  kLabel.parent(kRow);
+  inputK = createInput(k + '', 'number');
+  inputK.parent(kRow);
+  inputK.size(50);
+  inputK.input(() => { k = float(inputK.value()); });
+  let bLabel = createSpan('  b = ');
+  bLabel.parent(kRow);
+  inputB = createInput(b + '', 'number');
+  inputB.parent(kRow);
+  inputB.size(50);
+  inputB.input(() => { b = float(inputB.value()); });
+}
+
+function draw() {
+  background(255);
+  drawAxes();
+  drawFunc1();
+  drawFunc2();
+  drawDragLineAndPoints();
+}
+
+function drawAxes() {
+  stroke(0);
+  strokeWeight(2);
+  // x轴
+  line(0, originY, width, originY);
+  // y轴
+  line(originX, 0, originX, height);
+  // x轴箭头
+  fill(0);
+  let arrowSize = 12;
+  // x正方向箭头
+  push();
+  translate(width - 1, originY);
+  rotate(0);
+  triangle(0, 0, -arrowSize, -arrowSize / 2, -arrowSize, arrowSize / 2);
+  pop();
+  // y正方向箭头
+  push();
+  translate(originX, 1);
+  rotate(-HALF_PI);
+  triangle(0, 0, -arrowSize, -arrowSize / 2, -arrowSize, arrowSize / 2);
+  pop();
+  // 刻度
+  strokeWeight(1);
+  textSize(12);
+  for (let i = -10; i <= 10; i++) {
+    if (i !== 0) {
+      // x轴刻度
+      line(originX + i * unit, originY - 3, originX + i * unit, originY + 3);
+      // y轴刻度
+      line(originX - 3, originY - i * unit, originX + 3, originY - i * unit);
+      // x轴数字
+      fill(0);
+      noStroke();
+      text(i, originX + i * unit - 6, originY + 15);
+      // y轴数字
+      text(i, originX + 8, originY - i * unit + 4);
+      stroke(0);
+    }
+  }
+  // 原点
+  fill(0);
+  noStroke();
+  textSize(14);
+  text("O", originX + 5, originY + 18);
+  // x轴y轴标注
+  textSize(16);
+  fill('#1565c0');
+  text('x', width - 22, originY - 10);
+  text('y', originX + 10, 18);
+}
+
+function drawFunc1() {
+  // y = a/x
+  stroke('red');
+  strokeWeight(2);
+  noFill();
+  // 绘制x<0部分
+  beginShape();
+  for (let px = 1; px < originX - unit * 0.1; px++) {
+    let x = (px - originX) / unit;
+    if (x < -0.05) {
+      let y = a / x;
+      let py = originY - y * unit;
+      if (py > 0 && py < height) {
+        vertex(px, py);
+      }
+    }
+  }
+  endShape();
+  // 绘制x>0部分
+  beginShape();
+  for (let px = originX + unit * 0.1; px < width; px++) {
+    let x = (px - originX) / unit;
+    if (x > 0.05) {
+      let y = a / x;
+      let py = originY - y * unit;
+      if (py > 0 && py < height) {
+        vertex(px, py);
+      }
+    }
+  }
+  endShape();
+  // 标注分别放在断点附近
+  noStroke();
+  fill('red');
+  textSize(16);
+  // 左侧断点附近
+  let xL = -0.5;
+  let yL = a / xL;
+  text('y=' + a + '/x', originX + xL * unit - 55, originY - yL * unit - 8);
+  // 右侧断点附近
+  let xR = 0.5;
+  let yR = a / xR;
+  text('y=' + a + '/x', originX + xR * unit + 8, originY - yR * unit - 8);
+}
+
+function drawFunc2() {
+  // y = kx + b
+  stroke('blue');
+  strokeWeight(2);
+  noFill();
+  beginShape();
+  for (let px = 0; px < width; px++) {
+    let x = (px - originX) / unit;
+    let y = k * x + b;
+    let py = originY - y * unit;
+    if (py > 0 && py < height) {
+      vertex(px, py);
+    }
+  }
+  endShape();
+  // 标注放在左端
+  noStroke();
+  fill('blue');
+  textSize(16);
+  let xL = -6;
+  let yL = k * xL + b;
+  text('y=' + k + 'x' + (b >= 0 ? '+' : '') + b, originX + xL * unit, originY - yL * unit - 8);
+}
+
+function mousePressed() {
+  // 判断鼠标是否在竖直线附近
+  let px = originX + dragLineX * unit;
+  if (abs(mouseX - px) < 10) {
+    dragging = true;
+  }
+}
+
+function mouseDragged() {
+  if (dragging) {
+    // 限制拖动范围在画布内
+    let x = (mouseX - originX) / unit;
+    x = constrain(x, -7, 7);
+    dragLineX = x;
+  }
+}
+
+function mouseReleased() {
+  dragging = false;
+}
+
+function drawDragLineAndPoints() {
+  // 画竖直线
+  let px = originX + dragLineX * unit;
+  stroke('green');
+  strokeWeight(2);
+  line(px, 0, px, height);
+
+  // 与y=a/x交点
+  if (abs(dragLineX) > 0.05) {
+    let y1 = a / dragLineX;
+    let py1 = originY - y1 * unit;
+    fill('red');
+    noStroke();
+    ellipse(px, py1, 18, 18);
+  }
+  // 与y=kx+b交点
+  let y2 = k * dragLineX + b;
+  let py2 = originY - y2 * unit;
+  fill('blue');
+  noStroke();
+  ellipse(px, py2, 18, 18);
+}
+</script>
+</body>
+</html> 

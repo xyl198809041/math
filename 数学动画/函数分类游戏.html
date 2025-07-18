@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>函数分类游戏</title>
+  <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/p5.js/1.4.1/p5.js"></script>
+  <style>
+    body { margin: 0; }
+    #error-bar {
+      position: absolute;
+      top: 1000px;
+      left: 20px;
+      width: 800px;
+      height: 200px;
+      background: #ffe0e0;
+      color: #a00;
+      font-size: 16px;
+      overflow: auto;
+      border: 2px solid #a00;
+      padding: 10px;
+      box-sizing: border-box;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+<div id="error-bar"></div>
+<script>
+let canvasW = 600, canvasH = 600;
+let panelW = 200, panelH = 600;
+let panelX = canvasW + 40, panelY = 20;
+let categories = [
+  {name: '一次函数', x: panelX + 20, y: panelY + 40, w: 160, h: 80, color: '#e3f2fd'},
+  {name: '正比例函数', x: panelX + 20, y: panelY + 160, w: 160, h: 80, color: '#e8f5e9'},
+  {name: '反比例函数', x: panelX + 20, y: panelY + 280, w: 160, h: 80, color: '#fff3e0'}
+];
+let currentFunc = null;
+let funcType = '';
+let funcExpr = '';
+let dragObj = null;
+let dragOffset = {x:0, y:0};
+let dragPos = {x: 100, y: 50};
+let isCorrect = null;
+let showResult = false;
+let resultMsg = '';
+let resultColor = '';
+
+function randomFunc() {
+  let t = floor(random(3));
+  if (t === 0) {
+    // 一次函数 y = ax + b
+    let a = nf(random([-3,-2,-1,1,2,3]),1,0);
+    let b = nf(random([-5,-3,0,2,4]),1,0);
+    funcExpr = `y = ${a==='1'?'':(a==='-1'?'-':'')+a}x${b==='0'?'':(b>0?'+':'')+b}`;
+    funcType = '一次函数';
+    currentFunc = x => Number(a)*x + Number(b);
+  } else if (t === 1) {
+    // 正比例函数 y = kx
+    let k = nf(random([-4,-2,-1,1,2,4]),1,0);
+    funcExpr = `y = ${k==='1'?'':(k==='-1'?'-':'')+k}x`;
+    funcType = '正比例函数';
+    currentFunc = x => Number(k)*x;
+  } else {
+    // 反比例函数 y = k/x
+    let k = nf(random([-6,-3,-1,1,3,6]),1,0);
+    funcExpr = `y = ${k==='1'?'':(k==='-1'?'-':'')+k}/x`;
+    funcType = '反比例函数';
+    currentFunc = x => Number(k)/x;
+  }
+}
+
+function setup() {
+  createCanvas(canvasW + panelW + 60, max(canvasH+40, 1220));
+  randomFunc();
+  dragObj = {expr: funcExpr, x: dragPos.x, y: dragPos.y, w: 180, h: 40};
+  textFont('微软雅黑');
+}
+
+function draw() {
+  background(255);
+  drawAxes();
+  drawFunc();
+  drawPanel();
+  drawDragObj();
+  if (showResult) {
+    fill(resultColor);
+    textSize(28);
+    textAlign(CENTER, CENTER);
+    text(resultMsg, width/2, 580);
+  }
+}
+
+function drawAxes() {
+  push();
+  translate(300, 300);
+  stroke(0);
+  strokeWeight(2);
+  // x轴
+  line(-280, 0, 280, 0);
+  // y轴
+  line(0, -280, 0, 280);
+  // 箭头
+  fill(0);
+  triangle(280,0,270,-8,270,8); // x轴箭头
+  triangle(0,-280,-8,-270,8,-270); // y轴箭头
+  // 刻度
+  for(let i=-10;i<=10;i++){
+    if(i!==-11 && i!==11 && i!==0){
+      line(i*25,-5,i*25,5); // x轴
+      line(-5,i*25,5,i*25); // y轴
+      textSize(12);
+      noStroke();
+      fill(0);
+      if(i!==0){
+        text(i, i*25, 18);
+        text(i, -18, -i*25);
+      }
+      stroke(0);
+    }
+  }
+  // 原点
+  fill(0);
+  noStroke();
+  textSize(14);
+  textAlign(RIGHT,TOP);
+  text('O',-5,5);
+  // x, y轴标注
+  textAlign(LEFT,TOP);
+  text('x',265,10);
+  textAlign(LEFT,BOTTOM);
+  text('y',10,-265);
+  pop();
+}
+
+function drawFunc() {
+  push();
+  translate(300, 300);
+  noFill();
+  stroke('#1976d2');
+  strokeWeight(2);
+  beginShape();
+  let first = true;
+  let lastPt = null;
+  for(let px=-250;px<=250;px+=1){
+    let x = px/25;
+    let y = currentFunc(x);
+    if (funcType==='反比例函数' && abs(x)<0.1) { lastPt = null; continue; }
+    if (abs(y)>11) { lastPt = null; continue; }
+    let py = -y*25;
+    if (lastPt && !(funcType==='反比例函数' && abs(x)<0.2)) {
+      line(lastPt.x, lastPt.y, px, py);
+    }
+    lastPt = {x: px, y: py};
+  }
+  endShape();
+  // 解析式标注
+  let labelX = 220, labelY = -220;
+  // MathML公式
+  let mathml = '';
+  if (funcType==='一次函数') {
+    let match = funcExpr.match(/y = ([^x]+)?x([+-][0-9]+)?/);
+    let a = (match && match[1]) ? match[1] : '';
+    let b = (match && match[2]) ? match[2] : '';
+    mathml = `<math><mi>y</mi><mo>=</mo>${a?`<mn>${a}</mn><mo>&#8290;</mo>`:''}<mi>x</mi>${b?`<mo>${b[0]}</mo><mn>${b.slice(1)}</mn>`:''}</math>`;
+  } else if (funcType==='正比例函数') {
+    let match = funcExpr.match(/y = ([^x]+)?x/);
+    let k = (match && match[1]) ? match[1] : '';
+    mathml = `<math><mi>y</mi><mo>=</mo>${k?`<mn>${k}</mn><mo>&#8290;</mo>`:''}<mi>x</mi></math>`;
+  } else {
+    let match = funcExpr.match(/y = ([^/]+)\/x/);
+    let k = (match && match[1]) ? match[1] : '';
+    mathml = `<math><mi>y</mi><mo>=</mo><mfrac><mn>${k}</mn><mi>x</mi></mfrac></math>`;
+  }
+  // 在画布上显示MathML
+  let mathDiv = document.getElementById('mathml');
+  if (!mathDiv) {
+    mathDiv = document.createElement('div');
+    mathDiv.id = 'mathml';
+    mathDiv.style.position = 'absolute';
+    mathDiv.style.left = (300+labelX+10)+'px';
+    mathDiv.style.top = (300+labelY-10)+'px';
+    mathDiv.style.fontSize = '22px';
+    mathDiv.style.zIndex = 10;
+    document.body.appendChild(mathDiv);
+  }
+  mathDiv.innerHTML = mathml;
+  mathDiv.style.left = (300+labelX+10)+'px';
+  mathDiv.style.top = (300+labelY-10)+'px';
+  pop();
+}
+
+function drawPanel() {
+  // 蓝色交互区
+  fill('#e3f2fd');
+  stroke('#1976d2');
+  strokeWeight(3);
+  rect(panelX, panelY, panelW, panelH, 20);
+  // 分类框
+  for (let cat of categories) {
+    fill(cat.color);
+    stroke('#1976d2');
+    strokeWeight(2);
+    rect(cat.x, cat.y, cat.w, cat.h, 12);
+    fill('#1976d2');
+    noStroke();
+    textSize(20);
+    textAlign(CENTER, CENTER);
+    text(cat.name, cat.x+cat.w/2, cat.y+cat.h/2);
+  }
+  // 说明
+  fill('#1976d2');
+  textSize(16);
+  textAlign(LEFT, TOP);
+  text('请将表达式拖到对应的分类框中', panelX+20, panelY+400);
+  // 新一题按钮
+  fill('#1976d2');
+  rect(panelX+40, panelY+500, 120, 40, 10);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  text('新一题', panelX+100, panelY+520);
+}
+
+function drawDragObj() {
+  fill('#fffde7');
+  stroke('#fbc02d');
+  strokeWeight(2);
+  rect(dragObj.x, dragObj.y, dragObj.w, dragObj.h, 10);
+  fill('#fbc02d');
+  noStroke();
+  textSize(22);
+  textAlign(CENTER, CENTER);
+  text(dragObj.expr, dragObj.x+dragObj.w/2, dragObj.y+dragObj.h/2);
+}
+
+function mousePressed() {
+  if (mouseX > dragObj.x && mouseX < dragObj.x+dragObj.w && mouseY > dragObj.y && mouseY < dragObj.y+dragObj.h) {
+    dragOffset.x = mouseX - dragObj.x;
+    dragOffset.y = mouseY - dragObj.y;
+    dragObj.dragging = true;
+    showResult = false;
+  }
+  // 新一题按钮
+  if (mouseX > panelX+40 && mouseX < panelX+160 && mouseY > panelY+500 && mouseY < panelY+540) {
+    randomFunc();
+    dragObj.expr = funcExpr;
+    dragObj.x = dragPos.x;
+    dragObj.y = dragPos.y;
+    showResult = false;
+    let mathDiv = document.getElementById('mathml');
+    if (mathDiv) mathDiv.innerHTML = '';
+  }
+}
+
+function mouseDragged() {
+  if (dragObj.dragging) {
+    dragObj.x = mouseX - dragOffset.x;
+    dragObj.y = mouseY - dragOffset.y;
+  }
+}
+
+function mouseReleased() {
+  if (dragObj.dragging) {
+    dragObj.dragging = false;
+    // 判断是否拖到分类框
+    let found = false;
+    for (let cat of categories) {
+      if (dragObj.x+dragObj.w/2 > cat.x && dragObj.x+dragObj.w/2 < cat.x+cat.w &&
+          dragObj.y+dragObj.h/2 > cat.y && dragObj.y+dragObj.h/2 < cat.y+cat.h) {
+        found = true;
+        if (cat.name === funcType) {
+          resultMsg = '分类正确！';
+          resultColor = '#388e3c';
+        } else {
+          resultMsg = `分类错误，正确答案是：${funcType}`;
+          resultColor = '#d32f2f';
+        }
+        showResult = true;
+        break;
+      }
+    }
+    if (!found) {
+      showResult = false;
+    }
+  }
+}
+
+// 错误捕捉
+window.onerror = function(msg, url, line, col, error) {
+  let errBar = document.getElementById('error-bar');
+  errBar.innerText = `错误: ${msg}\n位置: ${url}:${line}:${col}\n信息: ${error && error.stack ? error.stack : ''}`;
+};
+</script>
+</body>
+</html> 

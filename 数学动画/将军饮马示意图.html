@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>将军饮马示意图</title>
+  <script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/p5.js/1.4.1/p5.js"></script>
+  <style>
+    body { margin: 0; }
+    #ui-panel {
+      position: absolute;
+      left: 600px;
+      top: 0;
+      width: 200px;
+      height: 600px;
+      background: #e3f0ff;
+      border-left: 4px solid #2196f3;
+      box-sizing: border-box;
+      padding: 20px 10px;
+      color: #222;
+      font-family: '微软雅黑', sans-serif;
+    }
+    .coord-label { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div id="ui-panel">
+    <h3>点坐标</h3>
+    <div class="coord-label" id="coordA"></div>
+    <div class="coord-label" id="coordB"></div>
+    <div class="coord-label" id="coordP"></div>
+    <p style="color:#2196f3;">拖动A、B点改变位置</p>
+  </div>
+  <script>
+    let A, B, P;
+    let draggingA = false, draggingB = false;
+    let offsetA, offsetB;
+    const riverY = 350; // 河流y坐标
+    const riverH = 60;  // 河流宽度
+    let horseImg;
+    let animating = false;
+    let t1 = 0, t2 = 0;
+    let totalT1 = 60, totalT2 = 60; // 帧数
+    let path1, path2;
+    let splitAtP = false;
+    let horsesAtEnd = false;
+
+    function setup() {
+      createCanvas(600, 600);
+      A = createVector(120, 500);
+      B = createVector(480, 520);
+      P = createVector(300, riverY + riverH/2); // 初始喝水点
+      createHorseImg();
+      createStartButton();
+    }
+
+    function createHorseImg() {
+      horseImg = createGraphics(40, 24);
+      let g = horseImg;
+      g.clear();
+      g.push();
+      g.translate(20, 12);
+      g.scale(1.2);
+      g.stroke(80);
+      g.fill(180, 120, 60);
+      g.ellipse(0, 0, 18, 10); // 身体
+      g.ellipse(-7, -5, 8, 8); // 头
+      g.strokeWeight(2);
+      g.line(-10, 2, -14, 8); // 尾巴
+      g.pop();
+    }
+
+    function createStartButton() {
+      let btn = createButton('开始');
+      btn.position(600 + 60, 540);
+      btn.size(80, 40);
+      btn.style('background', '#2196f3');
+      btn.style('color', '#fff');
+      btn.style('font-size', '20px');
+      btn.style('border', 'none');
+      btn.style('border-radius', '8px');
+      btn.mousePressed(startAnimation);
+    }
+
+    function startAnimation() {
+      if (animating) return;
+      animating = true;
+      t1 = 0;
+      t2 = 0;
+      splitAtP = false;
+      horsesAtEnd = false;
+      path1 = {from: A.copy(), to: P.copy()};
+      path2 = {from: P.copy(), to: B.copy()};
+      let riverLineY = riverY + riverH/2;
+      let Bp_y = 2 * riverLineY - B.y;
+      path2b = {from: P.copy(), to: createVector(B.x, Bp_y)};
+      t2b = 0;
+      totalT2b = totalT2;
+    }
+
+    function draw() {
+      background(255);
+      drawFormula();
+      drawRiver();
+      drawPoints();
+      drawPath();
+      updateUIPanel();
+      if (animating) {
+        animateHorse();
+      } else if (horsesAtEnd) {
+        drawHorsesAtEnd();
+      }
+    }
+
+    function drawFormula() {
+      push();
+      textAlign(CENTER, TOP);
+      textSize(22);
+      fill('#222');
+      text('总路程(S) = AP + PB = AP + PB\n当A、P、B\'三点共线时，S最小', width/2, 18);
+      pop();
+    }
+
+    function drawRiver() {
+      stroke('#2196f3');
+      strokeWeight(4);
+      line(0, riverY + riverH/2, 600, riverY + riverH/2);
+      noStroke();
+      fill(0, 80, 200);
+      textSize(20);
+      textAlign(LEFT, CENTER);
+      text('河', 10, riverY + riverH/2 - 18);
+    }
+    function drawPoints() {
+      // A点
+      fill('#ff5722');
+      stroke(0);
+      ellipse(A.x, A.y, 18, 18);
+      fill(0);
+      noStroke();
+      textAlign(CENTER, BOTTOM);
+      text('A', A.x, A.y - 10);
+      // B点
+      fill('#4caf50');
+      stroke(0);
+      ellipse(B.x, B.y, 18, 18);
+      fill(0);
+      noStroke();
+      textAlign(CENTER, BOTTOM);
+      text('B', B.x, B.y - 10);
+      // 喝水点P
+      fill('#2196f3');
+      stroke(0);
+      ellipse(P.x, P.y, 16, 16);
+      fill(0);
+      noStroke();
+      textAlign(CENTER, TOP);
+      text('P', P.x, P.y + 10);
+      // B关于河的对称点B'
+      let riverLineY = riverY + riverH/2;
+      let Bp_y = 2 * riverLineY - B.y;
+      fill('#388e3c');
+      stroke(0);
+      ellipse(B.x, Bp_y, 16, 16);
+      fill(0);
+      noStroke();
+      textAlign(CENTER, TOP);
+      text("B'", B.x, Bp_y + 10);
+    }
+    function drawPath() {
+      strokeWeight(3);
+      stroke('#ff9800');
+      noFill();
+      // A->P
+      line(A.x, A.y, P.x, P.y);
+      // P->B
+      stroke('#388e3c');
+      line(P.x, P.y, B.x, B.y);
+      // P->B' 虚线
+      let riverLineY = riverY + riverH/2;
+      let Bp_y = 2 * riverLineY - B.y;
+      drawDashedLine(P.x, P.y, B.x, Bp_y, '#388e3c');
+      // 马的图标
+      drawHorse(A.x, A.y, P.x, P.y);
+    }
+    function drawDashedLine(x1, y1, x2, y2, col) {
+      stroke(col);
+      strokeWeight(3);
+      drawingContext.setLineDash([10, 8]);
+      line(x1, y1, x2, y2);
+      drawingContext.setLineDash([]);
+    }
+    function drawHorse(ax, ay, px, py) {
+      // 静态时马只在A点，若horsesAtEnd为true则不画A点马
+      if (!animating && !horsesAtEnd) {
+        imageMode(CENTER);
+        image(horseImg, ax, ay, 40, 24);
+      }
+    }
+
+    function animateHorse() {
+      let pos;
+      if (t1 < totalT1) {
+        let tt = t1 / totalT1;
+        pos = p5.Vector.lerp(path1.from, path1.to, tt);
+        imageMode(CENTER);
+        image(horseImg, pos.x, pos.y, 40, 24);
+        t1++;
+      } else {
+        // 到达P点，分裂
+        if (!splitAtP) {
+          splitAtP = true;
+          t2 = 0;
+          t2b = 0;
+        }
+        let tt2 = min(1, t2 / totalT2);
+        let tt2b = min(1, t2b / totalT2b);
+        let pos2 = p5.Vector.lerp(path2.from, path2.to, tt2);
+        let pos2b = p5.Vector.lerp(path2b.from, path2b.to, tt2b);
+        imageMode(CENTER);
+        image(horseImg, pos2.x, pos2.y, 40, 24);
+        image(horseImg, pos2b.x, pos2b.y, 40, 24);
+        if (t2 < totalT2) t2++;
+        if (t2b < totalT2b) t2b++;
+        if (t2 >= totalT2 && t2b >= totalT2b) {
+          animating = false;
+          horsesAtEnd = true;
+        }
+      }
+    }
+
+    function drawHorsesAtEnd() {
+      // 画在B和B'点
+      imageMode(CENTER);
+      image(horseImg, B.x, B.y, 40, 24);
+      let riverLineY = riverY + riverH/2;
+      let Bp_y = 2 * riverLineY - B.y;
+      image(horseImg, B.x, Bp_y, 40, 24);
+    }
+
+    function mousePressed() {
+      if (animating) return;
+      if (dist(mouseX, mouseY, A.x, A.y) < 15) {
+        draggingA = true;
+        offsetA = createVector(mouseX - A.x, mouseY - A.y);
+      } else if (dist(mouseX, mouseY, B.x, B.y) < 15) {
+        draggingB = true;
+        offsetB = createVector(mouseX - B.x, mouseY - B.y);
+      } else if (dist(mouseX, mouseY, P.x, P.y) < 15) {
+        P.x = constrain(mouseX, 20, 580);
+        P.y = riverY + riverH/2;
+      }
+    }
+    function mouseDragged() {
+      if (animating) return;
+      if (draggingA) {
+        A.x = constrain(mouseX - offsetA.x, 20, 580);
+        A.y = constrain(mouseY - offsetA.y, riverY + riverH + 20, 580);
+      } else if (draggingB) {
+        B.x = constrain(mouseX - offsetB.x, 20, 580);
+        B.y = constrain(mouseY - offsetB.y, riverY + riverH + 20, 580);
+      } else if (dist(mouseX, mouseY, P.x, P.y) < 15) {
+        P.x = constrain(mouseX, 20, 580);
+        P.y = riverY + riverH/2;
+      }
+    }
+    function mouseReleased() {
+      draggingA = false;
+      draggingB = false;
+    }
+    function updateUIPanel() {
+      document.getElementById('coordA').innerText = `A: (${A.x.toFixed(0)}, ${A.y.toFixed(0)})`;
+      document.getElementById('coordB').innerText = `B: (${B.x.toFixed(0)}, ${B.y.toFixed(0)})`;
+      document.getElementById('coordP').innerText = `P: (${P.x.toFixed(0)}, ${P.y.toFixed(0)})`;
+    }
+  </script>
+</body>
+</html> 

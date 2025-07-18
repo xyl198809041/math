@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>几何图形动画</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.4.0/lib/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+        }
+        .container {
+            display: flex;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #p5-canvas {
+            display: block;
+        }
+        .controls {
+            width: 200px;
+            height: 600px; /* Keep height consistent with canvas */
+            background-color: #e0f2f7; /* Light blue box */
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        .coordinate-display {
+            font-family: monospace;
+            white-space: pre;
+            background-color: #f9f9f9;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="p5-canvas"></div>
+        <div class="controls">
+            <h3>控制面板</h3>
+            <div class="control-group">
+                <label for="timeSlider">时间 t: <span id="timeValue">0.00</span> 秒</label>
+                <input type="range" id="timeSlider" min="0" max="10" step="0.01" value="0">
+            </div>
+            <div class="control-group">
+                <h4>点坐标 (数学坐标):</h4>
+                <div class="coordinate-display" id="coords">
+                    A: (0.00, 4.00)
+                    B: (3.00, 4.00)
+                    C: (3.00, 0.00)
+                    D: (0.00, 0.00)
+                    E: (3.00, 4.00)
+                    F: (3.00, 1.00)
+                    G: (0.00, 1.00)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let time = 0;
+        let timeSlider;
+        let timeValueSpan;
+        let coordsDisplay;
+        let f_trajectory = []; // Array to store F point trajectory
+
+        // Canvas and drawing parameters
+        const CANVAS_WIDTH = 600;
+        const CANVAS_HEIGHT = 600;
+        const UNIT_SCALE = 40; // Pixels per unit
+        const ORIGIN_X = 40; // New Canvas X for math origin (0,0) after rotation adjustment
+        const ORIGIN_Y = 320; // New Canvas Y for math origin (0,0) after rotation adjustment
+
+        // Helper function to convert math coordinates to canvas coordinates
+        function toCanvas(mathX, mathY) {
+            let canvasX = ORIGIN_X + mathX * UNIT_SCALE;
+            let canvasY = ORIGIN_Y - mathY * UNIT_SCALE; // Y-axis is inverted in canvas
+            return createVector(canvasX, canvasY);
+        }
+
+        // Helper function to draw points and labels
+        function drawPoint(p, label) {
+            fill(0);
+            noStroke();
+            ellipse(p.x, p.y, 6, 6);
+            fill(0);
+            text(label, p.x + 8, p.y + 4);
+        }
+
+        // Helper function to draw line segments
+        function drawLine(p1, p2) {
+            stroke(0);
+            strokeWeight(1);
+            line(p1.x, p1.y, p2.x, p2.y);
+        }
+
+        // Helper function to draw a polygon
+        function drawPolygon(points) {
+            beginShape();
+            for (let p of points) {
+                vertex(p.x, p.y);
+            }
+            endShape(CLOSE);
+        }
+
+        // Helper function to rotate a point (mathX, mathY) 90 degrees counter-clockwise around A(0,4)
+        function rotatePointAroundA(px, py) {
+            const AX = 0;
+            const AY = 4;
+
+            // Translate point so A is at origin
+            let translatedX = px - AX;
+            let translatedY = py - AY;
+
+            // Rotate 90 degrees counter-clockwise: (x,y) -> (-y, x)
+            let rotatedX = -translatedY;
+            let rotatedY = translatedX;
+
+            // Translate back
+            let finalX = rotatedX + AX;
+            let finalY = rotatedY + AY;
+
+            return { x: finalX, y: finalY };
+        }
+
+        function setup() {
+            let canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+            canvas.parent('p5-canvas'); // Attach canvas to the div
+
+            timeSlider = select('#timeSlider');
+            timeValueSpan = select('#timeValue');
+            coordsDisplay = select('#coords');
+
+            timeSlider.input(updateTime);
+            updateTime(); // Initial update
+        }
+
+        function updateTime() {
+            time = parseFloat(timeSlider.value());
+            timeValueSpan.html(time.toFixed(2));
+            
+            // Update displayed coordinates with rotated values
+            let A_math_orig = { x: 0, y: 4 };
+            let B_math_orig = { x: 3, y: 4 };
+            let C_math_orig = { x: 3, y: 0 };
+            let D_math_orig = { x: 0, y: 0 };
+            let E_math_orig = { x: 3, y: 4 - time };
+            // Vector AE_orig = (3, -time)
+            // Rotate AE_orig 90 degrees clockwise for AG_orig: (dy, -dx) -> (-time, -3)
+            let G_math_orig = { x: A_math_orig.x - time, y: A_math_orig.y - 3 }; 
+            let F_math_orig = { x: E_math_orig.x - time, y: E_math_orig.y - 3 }; 
+
+            let A_math = rotatePointAroundA(A_math_orig.x, A_math_orig.y);
+            let B_math = rotatePointAroundA(B_math_orig.x, B_math_orig.y);
+            let C_math = rotatePointAroundA(C_math_orig.x, C_math_orig.y);
+            let D_math = rotatePointAroundA(D_math_orig.x, D_math_orig.y);
+            let E_math = rotatePointAroundA(E_math_orig.x, E_math_orig.y);
+            let G_math = rotatePointAroundA(G_math_orig.x, G_math_orig.y);
+            let F_math = rotatePointAroundA(F_math_orig.x, F_math_orig.y);
+
+            coordsDisplay.html(
+                `A: (${A_math.x.toFixed(2)}, ${A_math.y.toFixed(2)})<br/>` +
+                `B: (${B_math.x.toFixed(2)}, ${B_math.y.toFixed(2)})<br/>` +
+                `C: (${C_math.x.toFixed(2)}, ${C_math.y.toFixed(2)})<br/>` +
+                `D: (${D_math.x.toFixed(2)}, ${D_math.y.toFixed(2)})<br/>` +
+                `E: (${E_math.x.toFixed(2)}, ${E_math.y.toFixed(2)})<br/>` +
+                `F: (${F_math.x.toFixed(2)}, ${F_math.y.toFixed(2)})<br/>` +
+                `G: (${G_math.x.toFixed(2)}, ${G_math.y.toFixed(2)})`
+            );
+
+            f_trajectory = []; // Clear trajectory when time changes
+
+            // Calculate and store trajectory points up to the current time, applying rotation
+            for (let t_val = 0; t_val <= time; t_val += 0.01) {
+                let E_original_math_t = { x: 3, y: 4 - t_val };
+                let F_original_math_t = { x: E_original_math_t.x - t_val, y: E_original_math_t.y - 3 };
+                
+                let F_rotated_math_t = rotatePointAroundA(F_original_math_t.x, F_original_math_t.y);
+                f_trajectory.push(toCanvas(F_rotated_math_t.x, F_rotated_math_t.y));
+            }
+
+            redraw(); // Redraw the canvas when time changes
+        }
+
+        function draw() {
+            background(255); // White background
+
+            // --- Calculate current positions (rotated) ---
+            let A_math_orig = { x: 0, y: 4 };
+            let B_math_orig = { x: 3, y: 4 };
+            let C_math_orig = { x: 3, y: 0 };
+            let D_math_orig = { x: 0, y: 0 };
+            let E_math_orig = { x: 3, y: 4 - time };
+            // Vector AE_orig in math coords: (3, -(time))
+            // Vector AG_orig in math coords (rotated 90 deg clockwise from AE_orig): (-time, -3)
+            let G_math_orig = { x: A_math_orig.x - time, y: A_math_orig.y - 3 };
+            let F_math_orig = { x: E_math_orig.x - time, y: E_math_orig.y - 3 };
+
+            let A = toCanvas(rotatePointAroundA(A_math_orig.x, A_math_orig.y).x, rotatePointAroundA(A_math_orig.x, A_math_orig.y).y);
+            let B = toCanvas(rotatePointAroundA(B_math_orig.x, B_math_orig.y).x, rotatePointAroundA(B_math_orig.x, B_math_orig.y).y);
+            let C = toCanvas(rotatePointAroundA(C_math_orig.x, C_math_orig.y).x, rotatePointAroundA(C_math_orig.x, C_math_orig.y).y);
+            let D = toCanvas(rotatePointAroundA(D_math_orig.x, D_math_orig.y).x, rotatePointAroundA(D_math_orig.x, D_math_orig.y).y);
+            let E = toCanvas(rotatePointAroundA(E_math_orig.x, E_math_orig.y).x, rotatePointAroundA(E_math_orig.x, E_math_orig.y).y);
+            let G = toCanvas(rotatePointAroundA(G_math_orig.x, G_math_orig.y).x, rotatePointAroundA(G_math_orig.x, G_math_orig.y).y);
+            let F = toCanvas(rotatePointAroundA(F_math_orig.x, F_math_orig.y).x, rotatePointAroundA(F_math_orig.x, F_math_orig.y).y);
+
+            // --- Draw Rectangle ABCD ---
+            noFill();
+            stroke(0);
+            strokeWeight(2);
+            drawPolygon([A, B, C, D]);
+
+            // --- Draw Square AEFG ---
+            stroke(color(0, 0, 255)); // Blue stroke for the square
+            strokeWeight(2);
+            drawPolygon([A, E, F, G]);
+
+            // --- Draw F point trajectory ---
+            stroke(255, 0, 0); // Red color for trajectory
+            strokeWeight(2);
+            noFill();
+            beginShape();
+            for (let i = 0; i < f_trajectory.length; i++) {
+                vertex(f_trajectory[i].x, f_trajectory[i].y);
+            }
+            endShape();
+
+            // --- Draw points and labels ---
+            drawPoint(A, 'A');
+            drawPoint(B, 'B');
+            drawPoint(C, 'C');
+            drawPoint(D, 'D');
+            drawPoint(E, 'E');
+            drawPoint(F, 'F');
+            drawPoint(G, 'G');
+        }
+    </script>
+</body>
+</html> 
