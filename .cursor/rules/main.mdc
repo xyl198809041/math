@@ -10,7 +10,7 @@ alwaysApply: true
 html文件的名字可以通过动画内容取一个中文文件名.
 文件放在根目录下即可，无需扫描文件夹和参考规则以外的其他文件
 生成html时主要使用p5.js库生成动画效果
-p5.js的cdn路径为https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/p5.js/1.4.1/p5.js
+p5.js的cdn路径为https://s4.zstatic.net/ajax/libs/p5.js/2.0.3/p5.min.js
 画布大小注意需要包含全部的动画.画布大小一般为600*600
 
 如果需要设置交互的按钮或者文本框等控件,统一在画布右侧,并且统一放在蓝色框中.框的高度跟画布高度一致,框的宽度200.
