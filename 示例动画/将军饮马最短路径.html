@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>将军饮马最短路径动画</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+</head>
+<body>
+<script>
+// 设定A、B、河流位置
+let A = {x: 150, y: 100};
+let B = {x: 650, y: 120};
+let riverY = 350;
+let canvasH = 650;
+let horsePos = {x: A.x, y: A.y};
+let horse2Pos = null; // 新增第二匹马
+let phase = 0; // 0: A->P, 1: P->B, 2: P->B'
+let speed = 2;
+
+// 计算B关于河流的对称点B'
+let Bp = {x: B.x, y: 2*riverY - B.y};
+// 初始P点
+let t = (riverY - A.y) / (Bp.y - A.y);
+let P = {x: A.x + t * (Bp.x - A.x), y: riverY};
+let draggingP = false;
+const P_RADIUS = 14;
+
+function setup() {
+  createCanvas(800, canvasH);
+  textFont('微软雅黑');
+}
+
+function draw() {
+  background(220, 240, 255);
+  drawRiver();
+  drawPointsAndLabels();
+  drawPaths();
+  drawHorse();
+  moveHorse();
+}
+
+function drawRiver() {
+  noStroke();
+  fill(100, 180, 255);
+  rect(0, riverY, width, height - riverY);
+  fill(80, 160, 220, 80);
+  for (let i = 0; i < width; i += 40) {
+    ellipse(i + 20, riverY + 30, 60, 15);
+  }
+  fill(0,80);
+  textSize(18);
+  text('河流', 30, riverY + 40);
+}
+
+function drawPointsAndLabels() {
+  // A点
+  fill(255,0,0);
+  ellipse(A.x, A.y, 14, 14);
+  textSize(18);
+  text('A', A.x-22, A.y-10);
+  // B点
+  fill(0,120,0);
+  ellipse(B.x, B.y, 14, 14);
+  text('B', B.x+10, B.y);
+  // B'点
+  fill(0,0,180);
+  ellipse(Bp.x, Bp.y, 12, 12);
+  textSize(16);
+  text("B'", Bp.x+10, Bp.y);
+  // P点
+  fill(255,140,0);
+  ellipse(P.x, P.y, P_RADIUS, P_RADIUS);
+  textSize(18);
+  text('P', P.x+10, P.y+5);
+}
+
+function drawPaths() {
+  // A到B'虚线
+  stroke(80,80,80,120);
+  strokeWeight(2);
+  drawingContext.setLineDash([8, 8]);
+  line(A.x, A.y, Bp.x, Bp.y);
+  // PB虚线
+  line(P.x, P.y, B.x, B.y);
+  // 新增PB'虚线
+  line(P.x, P.y, Bp.x, Bp.y);
+  drawingContext.setLineDash([]);
+  // A->P最短路径
+  stroke(255,0,0);
+  strokeWeight(3);
+  line(A.x, A.y, P.x, P.y);
+  // P->B最短路径
+  line(P.x, P.y, B.x, B.y);
+}
+
+function drawHorse() {
+  // 第一匹马
+  if (phase === 0 || phase === 1) {
+    push();
+    translate(horsePos.x, horsePos.y);
+    fill(160, 120, 60);
+    ellipse(0, 0, 32, 14);
+    ellipse(18, -4, 12, 8);
+    stroke(120,80,40);
+    strokeWeight(3);
+    line(-8, 8, -8, 20);
+    line(8, 8, 8, 20);
+    line(-4, 8, -4, 20);
+    line(4, 8, 4, 20);
+    strokeWeight(2);
+    line(-16, 2, -24, 16);
+    pop();
+  }
+  // 第二匹马
+  if (phase === 2 && horse2Pos) {
+    // 第一匹马（P->B）
+    push();
+    translate(horsePos.x, horsePos.y);
+    fill(160, 120, 60);
+    ellipse(0, 0, 32, 14);
+    ellipse(18, -4, 12, 8);
+    stroke(120,80,40);
+    strokeWeight(3);
+    line(-8, 8, -8, 20);
+    line(8, 8, 8, 20);
+    line(-4, 8, -4, 20);
+    line(4, 8, 4, 20);
+    strokeWeight(2);
+    line(-16, 2, -24, 16);
+    pop();
+    // 第二匹马（P->B'）
+    push();
+    translate(horse2Pos.x, horse2Pos.y);
+    fill(120, 80, 180);
+    ellipse(0, 0, 32, 14);
+    ellipse(18, -4, 12, 8);
+    stroke(80,60,120);
+    strokeWeight(3);
+    line(-8, 8, -8, 20);
+    line(8, 8, 8, 20);
+    line(-4, 8, -4, 20);
+    line(4, 8, 4, 20);
+    strokeWeight(2);
+    line(-16, 2, -24, 16);
+    pop();
+  }
+}
+
+function moveHorse() {
+  if (phase === 0) {
+    // A->P
+    let dx = P.x - horsePos.x;
+    let dy = P.y - horsePos.y;
+    let distToTarget = sqrt(dx*dx + dy*dy);
+    if (distToTarget > speed) {
+      horsePos.x += speed * dx / distToTarget;
+      horsePos.y += speed * dy / distToTarget;
+    } else {
+      horsePos.x = P.x;
+      horsePos.y = P.y;
+      // 到达P点，分成两匹马
+      horse2Pos = {x: P.x, y: P.y};
+      phase = 2;
+    }
+  } else if (phase === 2) {
+    // 两匹马分别运动
+    // 第一匹马：P->B
+    let dx1 = B.x - horsePos.x;
+    let dy1 = B.y - horsePos.y;
+    let dist1 = sqrt(dx1*dx1 + dy1*dy1);
+    if (dist1 > speed) {
+      horsePos.x += speed * dx1 / dist1;
+      horsePos.y += speed * dy1 / dist1;
+    } else {
+      horsePos.x = B.x;
+      horsePos.y = B.y;
+    }
+    // 第二匹马：P->B'
+    let dx2 = Bp.x - horse2Pos.x;
+    let dy2 = Bp.y - horse2Pos.y;
+    let dist2 = sqrt(dx2*dx2 + dy2*dy2);
+    if (dist2 > speed) {
+      horse2Pos.x += speed * dx2 / dist2;
+      horse2Pos.y += speed * dy2 / dist2;
+    } else {
+      horse2Pos.x = Bp.x;
+      horse2Pos.y = Bp.y;
+    }
+  }
+}
+
+function mousePressed() {
+  // 判断鼠标是否点中P点
+  if (dist(mouseX, mouseY, P.x, P.y) < P_RADIUS + 4) {
+    draggingP = true;
+  }
+}
+
+function mouseDragged() {
+  if (draggingP) {
+    P.x = constrain(mouseX, 0, width);
+    P.y = riverY;
+    // 拖动后，马回到A点重新运动
+    horsePos = {x: A.x, y: A.y};
+    horse2Pos = null;
+    phase = 0;
+  }
+}
+
+function mouseReleased() {
+  draggingP = false;
+}
+</script>
+</body>
+</html> 
