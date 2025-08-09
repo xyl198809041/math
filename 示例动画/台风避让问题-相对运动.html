@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台风避让问题-相对运动</title>
+  <script src="https://s4.zstatic.net/ajax/libs/p5.js/2.0.3/p5.min.js"></script>
+  <style>
+    :root {
+      --bg-start: #f6fbff;
+      --bg-end:   #eaf2ff;
+      --text:     #222222;
+      --axis:     #3f4a5a;
+      --grid:     #e6eef8;
+      --accent:   #2e7dd7;
+      --danger:   #d94b4b;
+      --panel-bg: rgba(30, 144, 255, 0.08);
+      --panel-border: #1e90ff;
+    }
+    body.dark {
+      --bg-start: #0f1420;
+      --bg-end:   #111827;
+      --text:     #e6e6e6;
+      --axis:     #cfd6e6;
+      --grid:     #1e2533;
+      --accent:   #7ab6ff;
+      --danger:   #ff7a7a;
+      --panel-bg: rgba(46, 125, 215, 0.12);
+      --panel-border: #7ab6ff;
+    }
+    body {
+      font-family: "Segoe UI", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+      margin: 20px;
+      color: var(--text);
+      background: linear-gradient(180deg, var(--bg-start), var(--bg-end));
+    }
+    #wrap { display: flex; align-items: flex-start; gap: 16px; }
+    #panel {
+      width: 200px; height: 600px; box-sizing: border-box; padding: 12px 10px; overflow: auto;
+      border: 2px solid var(--panel-border); background: var(--panel-bg); border-radius: 10px;
+      backdrop-filter: saturate(1.1);
+    }
+    #panel h3 { margin: 8px 0 10px; font-size: 15px; }
+    .row { margin: 10px 0; }
+    .row label { display: block; font-size: 13px; margin-bottom: 6px; }
+    .val { font-weight: 700; color: #0a5; }
+    math { font-size: 13px; }
+    #errorBox {
+      width: 800px; height: 200px; margin-top: 1000px; border: 2px solid #c00; background: #fff6f6;
+      padding: 8px; overflow: auto; white-space: pre-wrap;
+    }
+    .note { font-size: 12px; opacity: 0.8; }
+    .swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+    .legend { font-size: 12px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="canvas-holder"></div>
+    <div id="panel">
+      <h3>参数控制</h3>
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input id="themeToggle" type="checkbox" /> 暗色主题
+        </label>
+      </div>
+      <div class="row">
+        <label>时间 t（小时）: <span id="tVal" class="val">0.00</span></label>
+        <input id="tSlider" type="range" min="0" max="30" step="0.01" value="0" />
+      </div>
+      <div class="row">
+        <label>船速 v_s（km/h）: <span id="vsVal" class="val">30</span></label>
+        <input id="vsSlider" type="range" min="0" max="60" step="1" value="30" />
+      </div>
+      <div class="row">
+        <label>台风北移速度 v_t（km/h）: <span id="vtVal" class="val">20</span></label>
+        <input id="vtSlider" type="range" min="0" max="60" step="1" value="20" />
+      </div>
+      <div class="row">
+        <label>影响半径 R（km）: <span id="rVal" class="val">200</span></label>
+        <input id="rSlider" type="range" min="50" max="300" step="10" value="200" />
+      </div>
+      <div class="row note">比例：坐标系每一格代表 50 km；画布中心为坐标原点，右为东、上为北。</div>
+
+      <h3>解析与结果</h3>
+      <div id="mathZone">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <mrow>
+            <mi>r</mi><mo>(</mo><mi>t</mi><mo>)</mo>
+            <mo>=</mo>
+            <mo>(</mo><mo>-</mo><mn>400</mn><mo>,</mo><mn>300</mn><mo>)</mo>
+            <mo>+</mo>
+            <mo>(</mo><mn>30</mn><mo>,</mo><mo>-</mo><mn>20</mn><mo>)</mo><mi>t</mi>
+          </mrow>
+          <mspace linebreak="newline"/>
+          <mrow>
+            <mi>d</mi><mo>^</mo><mn>2</mn><mo>(</mo><mi>t</mi><mo>)</mo>
+            <mo>=</mo>
+            <mn>1300</mn><mi>t</mi><mo>^</mo><mn>2</mn>
+            <mo>-</mo><mn>36000</mn><mi>t</mi>
+            <mo>+</mo><mn>250000</mn>
+          </mrow>
+          <mspace linebreak="newline"/>
+          <mrow>
+            <mi>d</mi><mo>(</mo><mi>t</mi><mo>)</mo><mo>=</mo><mn>200</mn>
+            <mo>&#x21D2;</mo>
+            <mn>1300</mn><mi>t</mi><mo>^</mo><mn>2</mn>
+            <mo>-</mo><mn>36000</mn><mi>t</mi>
+            <mo>+</mo><mn>210000</mn><mo>=</mo><mn>0</mn>
+          </mrow>
+        </math>
+        <div class="row">
+          入区时刻 t<sub>1</sub> ≈ <span id="t1" class="val">8.35</span> h；
+          出区时刻 t<sub>2</sub> ≈ <span id="t2" class="val">19.35</span> h
+        </div>
+        <div class="row">最近距离 d<sub>min</sub> ≈ <span id="dmin" class="val">27.74</span> km，发生在 t ≈ <span id="tmin" class="val">13.85</span> h</div>
+        <div class="row">当前距离 d(t) = <span id="dNow" class="val">500.00</span> km，状态：<span id="state" class="val">安全</span></div>
+      </div>
+      <div class="row legend">
+        <span class="swatch" style="background:var(--accent)"></span>点 B（台风中心）
+        <br/>
+        <span class="swatch" style="background:var(--accent)"></span>点 C（船，安全）
+        <br/>
+        <span class="swatch" style="background:var(--danger)"></span>点 C（受影响）
+      </div>
+    </div>
+  </div>
+
+  <div id="errorBox" title="错误信息栏（捕捉JS异常，包含位置与全部信息）"></div>
+
+  <script>
+    // 坐标与比例配置
+    const CANVAS_SIZE = 600;
+    const AXIS_MARGIN = 20;        // 坐标系边上留出 20 像素
+    const TICK_RANGE = 11;         // 刻度到 ±11，最外一格不画刻度
+    const KM_PER_GRID = 50;        // 1格 = 50 km
+    const UNIT_PER_KM = 1 / KM_PER_GRID; // km -> 坐标单位
+
+    // 初始几何量（km）
+    const AC0 = 400; // C 在 A 的西侧
+    const BA0 = 300; // B 在 A 的南侧
+
+    // HTML 控件
+    const tSlider = document.getElementById('tSlider');
+    const vsSlider = document.getElementById('vsSlider');
+    const vtSlider = document.getElementById('vtSlider');
+    const rSlider  = document.getElementById('rSlider');
+    const tVal = document.getElementById('tVal');
+    const vsVal = document.getElementById('vsVal');
+    const vtVal = document.getElementById('vtVal');
+    const rVal  = document.getElementById('rVal');
+    const t1El = document.getElementById('t1');
+    const t2El = document.getElementById('t2');
+    const tminEl = document.getElementById('tmin');
+    const dminEl = document.getElementById('dmin');
+    const dNowEl = document.getElementById('dNow');
+    const stateEl = document.getElementById('state');
+
+    let unitPixels; // 每坐标单位对应的像素
+    let pxCenter;   // 画布中心
+
+    // p5.js 初始化
+    let cnv;
+    const themeToggle = document.getElementById('themeToggle');
+    function setup() {
+      cnv = createCanvas(CANVAS_SIZE, CANVAS_SIZE);
+      cnv.parent('canvas-holder');
+      unitPixels = (CANVAS_SIZE - 2 * AXIS_MARGIN) / (2 * TICK_RANGE);
+      pxCenter = { x: CANVAS_SIZE / 2, y: CANVAS_SIZE / 2 };
+
+      // 初始化主题
+      const savedTheme = localStorage.getItem('typhoonTheme') || 'light';
+      if (savedTheme === 'dark') {
+        document.body.classList.add('dark');
+        themeToggle.checked = true;
+      }
+
+      // UI 事件
+      [tSlider, vsSlider, vtSlider, rSlider].forEach(el => {
+        el.addEventListener('input', onParamsChange);
+      });
+      themeToggle.addEventListener('change', () => {
+        document.body.classList.toggle('dark', themeToggle.checked);
+        localStorage.setItem('typhoonTheme', themeToggle.checked ? 'dark' : 'light');
+        redraw();
+      });
+      onParamsChange();
+      noLoop();
+      loop();
+    }
+
+    function draw() {
+      clear();
+      const isDark = document.body.classList.contains('dark');
+      background(isDark ? 18 : 255);
+      const colors = getThemeColors();
+      drawGrid(colors.grid);
+      drawAxes(colors.axis);
+
+      const params = getParams();
+      const k = UNIT_PER_KM; // km -> 单位
+
+      // 初始点（单位）
+      const A = { x: 0, y: 0 };
+      const B0 = { x: 0, y: -BA0 * k };
+      const C0 = { x: -AC0 * k, y: 0 };
+
+      // 速度（单位/小时）
+      const vShip = { x: params.vs * k, y: 0 };
+      const vTyph = { x: 0, y: params.vt * k };
+
+      // t 时刻位置（单位）
+      const B = { x: B0.x + vTyph.x * params.t, y: B0.y + vTyph.y * params.t };
+      const C = { x: C0.x + vShip.x * params.t, y: C0.y + vShip.y * params.t };
+
+      // 影响圈
+      const R_unit = params.R * k;
+
+      // 绘制台风影响区（半透明填充 + 虚线边）
+      push();
+      const dcol = colors.danger;
+      noStroke();
+      fill(color(red(dcol), green(dcol), blue(dcol), 40));
+      circleWU(B.x, B.y, 2 * R_unit);
+      noFill();
+      stroke(dcol);
+      strokeWeight(1.5);
+      drawingContext.setLineDash([6, 6]);
+      circleWU(B.x, B.y, 2 * R_unit);
+      drawingContext.setLineDash([]);
+      pop();
+
+      // B-C 连线与距离
+      push();
+      stroke(colors.axis);
+      strokeWeight(2);
+      lineWU(B.x, B.y, C.x, C.y);
+      pop();
+
+      // 计算距离（km）
+      const d_unit = dist(C.x, C.y, B.x, B.y);
+      const d_km = d_unit / k;
+
+      // 绘制点与标注
+      drawPointWithLabel(A.x, A.y, 'A', { dx: 8, dy: -8 }, colors.axis);
+      drawPointWithLabel(B.x, B.y, 'B', { dx: 8, dy: -8 }, colors.accent);
+      drawPointWithLabel(C.x, C.y, 'C', { dx: 8, dy: -8 }, d_km <= params.R ? colors.danger : colors.accent);
+
+      // 文本信息
+      fill(colors.text);
+      noStroke();
+      textSize(12);
+      text('比例: 1格 = ' + KM_PER_GRID + ' km', 10, 16);
+      text('t = ' + params.t.toFixed(2) + ' h', 10, 32);
+      text('当前距离 BC ≈ ' + d_km.toFixed(2) + ' km', 10, 48);
+
+      // 在连线中点附近标注距离（保持在画布范围内）
+      const mid = { x: (B.x + C.x) / 2, y: (B.y + C.y) / 2 };
+      const midPx = toScreenPoint(mid.x, mid.y);
+      push();
+      fill(colors.text);
+      textAlign(CENTER, BOTTOM);
+      text(d_km.toFixed(0) + ' km', midPx.x, midPx.y - 6);
+      pop();
+
+      // 更新面板中的当前状态
+      dNowEl.textContent = d_km.toFixed(2);
+      stateEl.textContent = d_km <= params.R ? '受影响' : '安全';
+      stateEl.style.color = d_km <= params.R ? '#c00' : '#0a5';
+    }
+
+    // 获取控件参数
+    function getParams() {
+      return {
+        t: parseFloat(tSlider.value),    // h
+        vs: parseFloat(vsSlider.value),  // km/h
+        vt: parseFloat(vtSlider.value),  // km/h
+        R: parseFloat(rSlider.value)     // km
+      };
+    }
+
+    // 控件变更时，重算解析结果并重绘
+    function onParamsChange() {
+      const p = getParams();
+      tVal.textContent = (+p.t).toFixed(2);
+      vsVal.textContent = p.vs.toString();
+      vtVal.textContent = p.vt.toString();
+      rVal.textContent = p.R.toString();
+
+      // 相对运动（以台风中心为参照）
+      const r0 = { x: -AC0, y: BA0 };           // km: C - B 在 t=0
+      const v = { x: p.vs, y: -p.vt };           // km/h: 船 - 台风
+      const R = p.R;                             // km
+
+      const r0dotv = r0.x * v.x + r0.y * v.y;
+      const v2 = v.x * v.x + v.y * v.y;
+      const r0_2 = r0.x * r0.x + r0.y * r0.y;
+
+      // d^2(t) = |r0 + v t|^2 = v^2 t^2 + 2(r0·v)t + |r0|^2
+      const A = v2;
+      const Bc = 2 * r0dotv;
+      const Cc = r0_2 - R * R;
+
+      let t1 = NaN, t2 = NaN, tmin = NaN, dmin = NaN;
+      if (A > 0) {
+        const disc = Bc * Bc - 4 * A * Cc;
+        if (disc >= 0) {
+          const s = Math.sqrt(disc);
+          t1 = (-Bc - s) / (2 * A);
+          t2 = (-Bc + s) / (2 * A);
+          if (t1 > t2) [t1, t2] = [t2, t1];
+        }
+        tmin = -r0dotv / v2;
+        const dmin2 = r0_2 - (r0dotv * r0dotv) / v2;
+        dmin = Math.sqrt(Math.max(0, dmin2));
+      }
+
+      // 显示到面板
+      t1El.textContent = isFinite(t1) ? t1.toFixed(2) : '—';
+      t2El.textContent = isFinite(t2) ? t2.toFixed(2) : '—';
+      tminEl.textContent = isFinite(tmin) ? tmin.toFixed(2) : '—';
+      dminEl.textContent = isFinite(dmin) ? dmin.toFixed(2) : '—';
+
+      redraw();
+    }
+
+    // —— 绘图辅助：坐标系 ——
+    function drawAxes(axisColor) {
+      push();
+      translate(pxCenter.x, pxCenter.y);
+      stroke(axisColor);
+      strokeWeight(2);
+
+      // x 轴（东）
+      line(-TICK_RANGE * unitPixels, 0, TICK_RANGE * unitPixels, 0);
+      // y 轴（北）
+      line(0, TICK_RANGE * unitPixels, 0, -TICK_RANGE * unitPixels);
+
+      // 刻度（不画最外一格）
+      strokeWeight(1);
+      for (let i = -TICK_RANGE + 1; i <= TICK_RANGE - 1; i++) {
+        // x 轴刻度
+        line(i * unitPixels, -4, i * unitPixels, 4);
+        // y 轴刻度
+        line(-4, i * unitPixels, 4, i * unitPixels);
+      }
+
+      // 箭头（黑色三角，按要求保持黑色）
+      fill(0);
+      noStroke();
+      // x 正方向
+      triangle(TICK_RANGE * unitPixels, 0, TICK_RANGE * unitPixels - 8, -5, TICK_RANGE * unitPixels - 8, 5);
+      // y 正方向
+      triangle(0, -TICK_RANGE * unitPixels, -5, -TICK_RANGE * unitPixels + 8, 5, -TICK_RANGE * unitPixels + 8);
+
+      // 轴标注
+      textSize(14);
+      fill(axisColor);
+      textAlign(LEFT, CENTER);
+      text('东', TICK_RANGE * unitPixels - 16, -14);
+      textAlign(CENTER, TOP);
+      text('北', 14, -TICK_RANGE * unitPixels + 4);
+
+      // 原点标注
+      textAlign(LEFT, TOP);
+      text('O', 6, 2);
+      pop();
+    }
+
+    // 背景网格
+    function drawGrid(gridColor) {
+      push();
+      translate(pxCenter.x, pxCenter.y);
+      stroke(gridColor);
+      strokeWeight(1);
+      for (let i = -TICK_RANGE + 1; i <= TICK_RANGE - 1; i++) {
+        if (i !== 0) {
+          // 竖线
+          line(i * unitPixels, -TICK_RANGE * unitPixels, i * unitPixels, TICK_RANGE * unitPixels);
+          // 横线
+          line(-TICK_RANGE * unitPixels, i * unitPixels, TICK_RANGE * unitPixels, i * unitPixels);
+        }
+      }
+      pop();
+    }
+
+    // —— 世界坐标到像素坐标 ——
+    function toScreenPoint(xu, yu) {
+      return {
+        x: pxCenter.x + xu * unitPixels,
+        y: pxCenter.y - yu * unitPixels
+      };
+    }
+
+    function lineWU(x1, y1, x2, y2) {
+      const p1 = toScreenPoint(x1, y1);
+      const p2 = toScreenPoint(x2, y2);
+      line(p1.x, p1.y, p2.x, p2.y);
+    }
+
+    function circleWU(cx, cy, dUnit) {
+      const p = toScreenPoint(cx, cy);
+      const dPx = dUnit * unitPixels;
+      circle(p.x, p.y, dPx);
+    }
+
+    function drawPointWithLabel(xu, yu, label, offset = {dx: 8, dy: -8}, col) {
+      const p = toScreenPoint(xu, yu);
+      push();
+      noStroke();
+      fill(col || color(0));
+      circle(p.x, p.y, 6);
+      fill(col || 0);
+      textSize(12);
+      text(label, p.x + offset.dx, p.y + offset.dy);
+      pop();
+    }
+
+    // 主题颜色读取
+    function getThemeColors() {
+      const cs = getComputedStyle(document.body);
+      const axis = cssVarToColor(cs.getPropertyValue('--axis'));
+      const grid = cssVarToColor(cs.getPropertyValue('--grid'));
+      const accent = cssVarToColor(cs.getPropertyValue('--accent'));
+      const danger = cssVarToColor(cs.getPropertyValue('--danger'));
+      const text = cssVarToColor(cs.getPropertyValue('--text'));
+      return { axis, grid, accent, danger, text };
+    }
+
+    function cssVarToColor(str) {
+      const s = str.trim();
+      if (s.startsWith('#')) {
+        const bigint = parseInt(s.slice(1), 16);
+        if (s.length === 7) {
+          return color((bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255);
+        }
+      }
+      // rgb(a)
+      const m = s.match(/rgba?\(([^)]+)\)/i);
+      if (m) {
+        const parts = m[1].split(',').map(v => parseFloat(v.trim()));
+        return color(parts[0] || 0, parts[1] || 0, parts[2] || 0, (parts[3] || 1) * 255);
+      }
+      // fallback
+      return color(0);
+    }
+
+    // 错误捕获到错误信息栏
+    window.addEventListener('error', function (e) {
+      const box = document.getElementById('errorBox');
+      const parts = [];
+      parts.push('消息: ' + e.message);
+      parts.push('源: ' + (e.filename || ''));
+      parts.push('位置: 行 ' + (e.lineno || '?') + ', 列 ' + (e.colno || '?'));
+      if (e.error && e.error.stack) parts.push('堆栈:\n' + e.error.stack);
+      box.textContent = parts.join('\n');
+    });
+  </script>
+</body>
+</html>
+
+

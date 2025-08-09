@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>轮船避台风问题</title>
+    <script src="https://s4.zstatic.net/ajax/libs/p5.js/2.0.3/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f8ff;
+        }
+        .control-panel {
+            position: absolute;
+            left: 620px;
+            top: 20px;
+            width: 200px;
+            height: 600px;
+            background-color: #e6f3ff;
+            border: 2px solid #4a90e2;
+            border-radius: 10px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        .control-item {
+            margin-bottom: 20px;
+        }
+        .control-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c5aa0;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 5px;
+            background-color: #4a90e2;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #357abd;
+        }
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .info-display {
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            font-size: 12px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .error-console {
+            position: absolute;
+            top: 1000px;
+            left: 20px;
+            width: 800px;
+            height: 200px;
+            background-color: #ffe6e6;
+            border: 2px solid #ff4444;
+            border-radius: 10px;
+            padding: 15px;
+            box-sizing: border-box;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-panel">
+        <h3 style="color: #2c5aa0; text-align: center; margin-top: 0;">控制面板</h3>
+        
+        <div class="control-item">
+            <button onclick="toggleAnimation()">开始/暂停</button>
+            <button onclick="resetAnimation()">重置</button>
+        </div>
+        
+        <div class="control-item">
+            <label>时间速度:</label>
+            <input type="range" class="slider" id="speedSlider" min="0.1" max="3" step="0.1" value="1" oninput="updateSpeed()">
+            <span id="speedValue">1.0x</span>
+        </div>
+        
+        <div class="control-item">
+            <label>轮船速度 (km/h):</label>
+            <input type="range" class="slider" id="shipSpeedSlider" min="10" max="50" step="5" value="30" oninput="updateShipSpeed()">
+            <span id="shipSpeedValue">30</span>
+        </div>
+        
+        <div class="control-item">
+            <label>台风速度 (km/h):</label>
+            <input type="range" class="slider" id="typhoonSpeedSlider" min="10" max="40" step="5" value="20" oninput="updateTyphoonSpeed()">
+            <span id="typhoonSpeedValue">20</span>
+        </div>
+        
+        <div class="info-display">
+            <div><strong>实时信息:</strong></div>
+            <div>时间: <span id="timeDisplay">0.0</span> 小时</div>
+            <div>轮船位置: (<span id="shipPos">-200, 0</span>)</div>
+            <div>台风中心: (<span id="typhoonPos">0, -150</span>)</div>
+            <div>距离: <span id="distance">250.0</span> km</div>
+            <div id="dangerStatus">安全</div>
+        </div>
+        
+        <div class="control-item">
+            <label>显示选项:</label>
+            <label><input type="checkbox" id="showTrail" checked> 显示轨迹</label><br>
+            <label><input type="checkbox" id="showGrid" checked> 显示网格</label><br>
+            <label><input type="checkbox" id="showDistance" checked> 显示距离线</label>
+        </div>
+    </div>
+
+    <div class="error-console" id="errorConsole">
+        <strong>错误信息控制台:</strong><br>
+        <div id="errorMessages">无错误信息</div>
+    </div>
+
+    <script>
+        let canvas;
+        let isRunning = false;
+        let timeElapsed = 0; // 小时
+        let animationSpeed = 1.0;
+        
+        // 坐标系设置
+        const CANVAS_WIDTH = 600;
+        const CANVAS_HEIGHT = 600;
+        const SCALE = 0.6; // km 到像素的比例 (1km = 0.6px)
+        const CENTER_X = CANVAS_WIDTH / 2;
+        const CENTER_Y = CANVAS_HEIGHT / 2;
+        
+        // 物理参数
+        let shipSpeed = 30; // km/h 向东
+        let typhoonSpeed = 20; // km/h 向北
+        const TYPHOON_RADIUS = 200; // km
+        
+        // 初始位置 (km)
+        let shipInitialX = -200; // 西边200km
+        let shipInitialY = 0;
+        let typhoonInitialX = 0; // 点A处
+        let typhoonInitialY = -150; // 南边150km (根据AC=400, BA=300计算)
+        
+        // 当前位置
+        let shipX, shipY;
+        let typhoonX, typhoonY;
+        
+        // 轨迹记录
+        let shipTrail = [];
+        let typhoonTrail = [];
+        
+        function setup() {
+            try {
+                canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+                canvas.parent(document.body);
+                resetAnimation();
+            } catch (error) {
+                logError('Setup error: ' + error.message);
+            }
+        }
+        
+        function draw() {
+            try {
+                background(240, 248, 255);
+                
+                // 更新位置
+                if (isRunning) {
+                    updatePositions();
+                }
+                
+                // 显示网格
+                if (document.getElementById('showGrid').checked) {
+                    drawGrid();
+                }
+                
+                // 绘制坐标系
+                drawCoordinateSystem();
+                
+                // 绘制台风影响区域
+                drawTyphoonArea();
+                
+                // 绘制轨迹
+                if (document.getElementById('showTrail').checked) {
+                    drawTrails();
+                }
+                
+                // 绘制距离线
+                if (document.getElementById('showDistance').checked) {
+                    drawDistanceLine();
+                }
+                
+                // 绘制轮船和台风
+                drawShip();
+                drawTyphoon();
+                
+                // 绘制标注
+                drawLabels();
+                
+                // 更新信息显示
+                updateInfoDisplay();
+                
+            } catch (error) {
+                logError('Draw error: ' + error.message + ' at line: ' + error.lineNumber);
+            }
+        }
+        
+        function updatePositions() {
+            try {
+                const dt = animationSpeed / 60; // 60fps转换为小时
+                timeElapsed += dt;
+                
+                // 轮船向东移动
+                shipX = shipInitialX + shipSpeed * timeElapsed;
+                shipY = shipInitialY;
+                
+                // 台风向北移动
+                typhoonX = typhoonInitialX;
+                typhoonY = typhoonInitialY + typhoonSpeed * timeElapsed;
+                
+                // 记录轨迹
+                if (frameCount % 3 === 0) { // 每3帧记录一次
+                    shipTrail.push({x: shipX, y: shipY});
+                    typhoonTrail.push({x: typhoonX, y: typhoonY});
+                    
+                    // 限制轨迹长度
+                    if (shipTrail.length > 200) shipTrail.shift();
+                    if (typhoonTrail.length > 200) typhoonTrail.shift();
+                }
+            } catch (error) {
+                logError('Position update error: ' + error.message);
+            }
+        }
+        
+        function drawGrid() {
+            try {
+                stroke(220);
+                strokeWeight(0.5);
+                
+                // 垂直线
+                for (let x = -500; x <= 500; x += 50) {
+                    const px = CENTER_X + x * SCALE;
+                    if (px >= 0 && px <= CANVAS_WIDTH) {
+                        line(px, 0, px, CANVAS_HEIGHT);
+                    }
+                }
+                
+                // 水平线
+                for (let y = -500; y <= 500; y += 50) {
+                    const py = CENTER_Y - y * SCALE;
+                    if (py >= 0 && py <= CANVAS_HEIGHT) {
+                        line(0, py, CANVAS_WIDTH, py);
+                    }
+                }
+            } catch (error) {
+                logError('Grid drawing error: ' + error.message);
+            }
+        }
+        
+        function drawCoordinateSystem() {
+            try {
+                stroke(0);
+                strokeWeight(2);
+                
+                // X轴
+                line(20, CENTER_Y, CANVAS_WIDTH - 20, CENTER_Y);
+                // Y轴
+                line(CENTER_X, 20, CENTER_X, CANVAS_HEIGHT - 20);
+                
+                // 箭头
+                fill(0);
+                noStroke();
+                // X轴箭头 (东)
+                triangle(CANVAS_WIDTH - 20, CENTER_Y, CANVAS_WIDTH - 30, CENTER_Y - 5, CANVAS_WIDTH - 30, CENTER_Y + 5);
+                // Y轴箭头 (北)
+                triangle(CENTER_X, 20, CENTER_X - 5, 30, CENTER_X + 5, 30);
+                
+                // 轴标签
+                fill(0);
+                textAlign(LEFT, CENTER);
+                text('东', CANVAS_WIDTH - 35, CENTER_Y - 15);
+                textAlign(CENTER, BOTTOM);
+                text('北', CENTER_X + 15, 25);
+                
+                // 原点标注
+                textAlign(CENTER, TOP);
+                text('O', CENTER_X - 10, CENTER_Y + 5);
+                
+                // 刻度
+                textAlign(CENTER, TOP);
+                for (let i = -400; i <= 400; i += 100) {
+                    if (i !== 0) {
+                        const px = CENTER_X + i * SCALE;
+                        if (px > 20 && px < CANVAS_WIDTH - 20) {
+                            stroke(0);
+                            strokeWeight(1);
+                            line(px, CENTER_Y - 3, px, CENTER_Y + 3);
+                            noStroke();
+                            fill(0);
+                            text(i, px, CENTER_Y + 8);
+                        }
+                    }
+                }
+                
+                textAlign(RIGHT, CENTER);
+                for (let i = -400; i <= 400; i += 100) {
+                    if (i !== 0) {
+                        const py = CENTER_Y - i * SCALE;
+                        if (py > 20 && py < CANVAS_HEIGHT - 20) {
+                            stroke(0);
+                            strokeWeight(1);
+                            line(CENTER_X - 3, py, CENTER_X + 3, py);
+                            noStroke();
+                            fill(0);
+                            text(i, CENTER_X - 8, py);
+                        }
+                    }
+                }
+            } catch (error) {
+                logError('Coordinate system error: ' + error.message);
+            }
+        }
+        
+        function drawTyphoonArea() {
+            try {
+                const px = CENTER_X + typhoonX * SCALE;
+                const py = CENTER_Y - typhoonY * SCALE;
+                const radius = TYPHOON_RADIUS * SCALE;
+                
+                // 影响区域
+                fill(255, 100, 100, 50);
+                stroke(255, 0, 0);
+                strokeWeight(2);
+                ellipse(px, py, radius * 2, radius * 2);
+                
+                // 中心点
+                fill(255, 0, 0);
+                noStroke();
+                ellipse(px, py, 8, 8);
+            } catch (error) {
+                logError('Typhoon area drawing error: ' + error.message);
+            }
+        }
+        
+        function drawTrails() {
+            try {
+                // 轮船轨迹
+                if (shipTrail.length > 1) {
+                    stroke(0, 100, 255, 150);
+                    strokeWeight(2);
+                    noFill();
+                    beginShape();
+                    for (let point of shipTrail) {
+                        const px = CENTER_X + point.x * SCALE;
+                        const py = CENTER_Y - point.y * SCALE;
+                        vertex(px, py);
+                    }
+                    endShape();
+                }
+                
+                // 台风轨迹
+                if (typhoonTrail.length > 1) {
+                    stroke(255, 0, 0, 150);
+                    strokeWeight(2);
+                    noFill();
+                    beginShape();
+                    for (let point of typhoonTrail) {
+                        const px = CENTER_X + point.x * SCALE;
+                        const py = CENTER_Y - point.y * SCALE;
+                        vertex(px, py);
+                    }
+                    endShape();
+                }
+            } catch (error) {
+                logError('Trail drawing error: ' + error.message);
+            }
+        }
+        
+        function drawDistanceLine() {
+            try {
+                const shipPx = CENTER_X + shipX * SCALE;
+                const shipPy = CENTER_Y - shipY * SCALE;
+                const typhoonPx = CENTER_X + typhoonX * SCALE;
+                const typhoonPy = CENTER_Y - typhoonY * SCALE;
+                
+                stroke(100, 100, 100);
+                strokeWeight(1);
+                setLineDash([5, 5]);
+                line(shipPx, shipPy, typhoonPx, typhoonPy);
+                setLineDash([]);
+                
+                // 距离标注
+                const midX = (shipPx + typhoonPx) / 2;
+                const midY = (shipPy + typhoonPy) / 2;
+                const distance = Math.sqrt((shipX - typhoonX) ** 2 + (shipY - typhoonY) ** 2);
+                
+                fill(0);
+                textAlign(CENTER, CENTER);
+                text(distance.toFixed(1) + 'km', midX, midY - 10);
+            } catch (error) {
+                logError('Distance line drawing error: ' + error.message);
+            }
+        }
+        
+        function drawShip() {
+            try {
+                const px = CENTER_X + shipX * SCALE;
+                const py = CENTER_Y - shipY * SCALE;
+                
+                push();
+                translate(px, py);
+                
+                // 轮船主体
+                fill(0, 150, 255);
+                stroke(0, 100, 200);
+                strokeWeight(2);
+                beginShape();
+                vertex(-15, -5);
+                vertex(15, -5);
+                vertex(20, 0);
+                vertex(15, 5);
+                vertex(-15, 5);
+                vertex(-20, 0);
+                endShape(CLOSE);
+                
+                // 桅杆
+                stroke(100);
+                strokeWeight(3);
+                line(0, -5, 0, -20);
+                
+                // 方向箭头
+                fill(255, 0, 0);
+                noStroke();
+                triangle(20, 0, 15, -3, 15, 3);
+                
+                pop();
+            } catch (error) {
+                logError('Ship drawing error: ' + error.message);
+            }
+        }
+        
+        function drawTyphoon() {
+            try {
+                const px = CENTER_X + typhoonX * SCALE;
+                const py = CENTER_Y - typhoonY * SCALE;
+                
+                push();
+                translate(px, py);
+                
+                // 台风标识
+                fill(255, 50, 50);
+                noStroke();
+                
+                // 旋转的螺旋
+                const rotation = frameCount * 0.1;
+                for (let i = 0; i < 3; i++) {
+                    push();
+                    rotate(rotation + i * TWO_PI / 3);
+                    ellipse(0, -8, 4, 8);
+                    ellipse(0, -16, 2, 4);
+                    pop();
+                }
+                
+                // 中心
+                fill(200, 0, 0);
+                ellipse(0, 0, 6, 6);
+                
+                // 方向箭头
+                fill(255, 0, 0);
+                triangle(0, -25, -3, -15, 3, -15);
+                
+                pop();
+            } catch (error) {
+                logError('Typhoon drawing error: ' + error.message);
+            }
+        }
+        
+        function drawLabels() {
+            try {
+                fill(0);
+                textAlign(LEFT, BOTTOM);
+                
+                // 轮船标签
+                const shipPx = CENTER_X + shipX * SCALE;
+                const shipPy = CENTER_Y - shipY * SCALE;
+                text('轮船', shipPx + 15, shipPy - 10);
+                text(shipSpeed + 'km/h 向东', shipPx + 15, shipPy + 5);
+                
+                // 台风标签
+                const typhoonPx = CENTER_X + typhoonX * SCALE;
+                const typhoonPy = CENTER_Y - typhoonY * SCALE;
+                text('台风中心', typhoonPx + 15, typhoonPy - 10);
+                text(typhoonSpeed + 'km/h 向北', typhoonPx + 15, typhoonPy + 5);
+                
+                // 初始条件标注
+                textAlign(LEFT, TOP);
+                text('初始条件: AC = 400km, BA = 300km', 10, 10);
+                text('台风影响半径: 200km', 10, 30);
+            } catch (error) {
+                logError('Label drawing error: ' + error.message);
+            }
+        }
+        
+        function updateInfoDisplay() {
+            try {
+                document.getElementById('timeDisplay').textContent = timeElapsed.toFixed(1);
+                document.getElementById('shipPos').textContent = shipX.toFixed(1) + ', ' + shipY.toFixed(1);
+                document.getElementById('typhoonPos').textContent = typhoonX.toFixed(1) + ', ' + typhoonY.toFixed(1);
+                
+                const distance = Math.sqrt((shipX - typhoonX) ** 2 + (shipY - typhoonY) ** 2);
+                document.getElementById('distance').textContent = distance.toFixed(1);
+                
+                const dangerStatus = document.getElementById('dangerStatus');
+                if (distance <= TYPHOON_RADIUS) {
+                    dangerStatus.textContent = '危险区域!';
+                    dangerStatus.style.color = 'red';
+                    dangerStatus.style.fontWeight = 'bold';
+                } else {
+                    dangerStatus.textContent = '安全';
+                    dangerStatus.style.color = 'green';
+                    dangerStatus.style.fontWeight = 'normal';
+                }
+            } catch (error) {
+                logError('Info display update error: ' + error.message);
+            }
+        }
+        
+        function toggleAnimation() {
+            isRunning = !isRunning;
+        }
+        
+        function resetAnimation() {
+            try {
+                isRunning = false;
+                timeElapsed = 0;
+                shipX = shipInitialX;
+                shipY = shipInitialY;
+                typhoonX = typhoonInitialX;
+                typhoonY = typhoonInitialY;
+                shipTrail = [];
+                typhoonTrail = [];
+            } catch (error) {
+                logError('Reset error: ' + error.message);
+            }
+        }
+        
+        function updateSpeed() {
+            const slider = document.getElementById('speedSlider');
+            animationSpeed = parseFloat(slider.value);
+            document.getElementById('speedValue').textContent = animationSpeed.toFixed(1) + 'x';
+        }
+        
+        function updateShipSpeed() {
+            const slider = document.getElementById('shipSpeedSlider');
+            shipSpeed = parseInt(slider.value);
+            document.getElementById('shipSpeedValue').textContent = shipSpeed;
+        }
+        
+        function updateTyphoonSpeed() {
+            const slider = document.getElementById('typhoonSpeedSlider');
+            typhoonSpeed = parseInt(slider.value);
+            document.getElementById('typhoonSpeedValue').textContent = typhoonSpeed;
+        }
+        
+        function setLineDash(segments) {
+            if (segments.length === 0) {
+                drawingContext.setLineDash([]);
+            } else {
+                drawingContext.setLineDash(segments);
+            }
+        }
+        
+        function logError(message) {
+            const errorDiv = document.getElementById('errorMessages');
+            const timestamp = new Date().toLocaleTimeString();
+            errorDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            errorDiv.scrollTop = errorDiv.scrollHeight;
+        }
+        
+        // 全局错误捕获
+        window.onerror = function(message, source, lineno, colno, error) {
+            logError(`Global error: ${message} at line ${lineno}, column ${colno}`);
+            return false;
+        };
+    </script>
+</body>
+</html>
